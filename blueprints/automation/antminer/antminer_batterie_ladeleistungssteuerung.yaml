@@ -152,138 +152,138 @@ blueprint:
       selector:
         text:
 
-  triggers:
-    - trigger: time_pattern
-      minutes: !input evaluation_interval
-      id: zyklus
+triggers:
+  - trigger: time_pattern
+    minutes: !input evaluation_interval
+    id: zyklus
 
-    - trigger: homeassistant
-      event: start
-      id: ha_start
+  - trigger: homeassistant
+    event: start
+    id: ha_start
 
-  conditions: []
+conditions: []
 
-  actions:
-    - if:
-        - condition: trigger
-          id: ha_start
-      then:
-        - delay: "00:00:30"
+actions:
+  - if:
+      - condition: trigger
+        id: ha_start
+    then:
+      - delay: "00:00:30"
 
-    - variables:
-        soc_entity: !input battery_soc
-        power_entity: !input battery_power
-        target_entity: !input miner_power_target
-        start_entity: !input miner_start
-        stop_entity: !input miner_stop
-        charging_sign_value: !input charging_sign
-        configured_max: !input max_miner_power
-        configured_reserve: !input charging_reserve
-        configured_min_change: !input minimum_change
-        battery_capacity: !input battery_capacity_kwh
+  - variables:
+      soc_entity: !input battery_soc
+      power_entity: !input battery_power
+      target_entity: !input miner_power_target
+      start_entity: !input miner_start
+      stop_entity: !input miner_stop
+      charging_sign_value: !input charging_sign
+      configured_max: !input max_miner_power
+      configured_reserve: !input charging_reserve
+      configured_min_change: !input minimum_change
+      battery_capacity: !input battery_capacity_kwh
 
-    - condition: template
-      value_template: >-
-        {{ states(soc_entity) not in ['unknown', 'unavailable', 'none', '']
-           and states(power_entity) not in ['unknown', 'unavailable', 'none', '']
-           and states(target_entity) not in ['unknown', 'unavailable', 'none', ''] }}
+  - condition: template
+    value_template: >-
+      {{ states(soc_entity) not in ['unknown', 'unavailable', 'none', '']
+         and states(power_entity) not in ['unknown', 'unavailable', 'none', '']
+         and states(target_entity) not in ['unknown', 'unavailable', 'none', ''] }}
 
-    - variables:
-        soc: "{{ states(soc_entity) | float(0) }}"
-        raw_battery_power: "{{ states(power_entity) | float(0) }}"
-        current_target: "{{ states(target_entity) | float(0) }}"
-        charging_power: >-
-          {% if charging_sign_value == 'negative' %}
-            {{ [0, raw_battery_power * -1] | max }}
-          {% else %}
-            {{ [0, raw_battery_power] | max }}
-          {% endif %}
-        energy: >-
-          {{ ((soc * (battery_capacity | float(25))) / 100) | round(2) }}
-        flow_text: >-
-          {% if charging_power > 0 %}
-            Laden
-          {% elif charging_sign_value == 'negative' and raw_battery_power > 0 %}
-            Entladen
-          {% elif charging_sign_value == 'positive' and raw_battery_power < 0 %}
-            Entladen
-          {% else %}
-            Stillstand
-          {% endif %}
+  - variables:
+      soc: "{{ states(soc_entity) | float(0) }}"
+      raw_battery_power: "{{ states(power_entity) | float(0) }}"
+      current_target: "{{ states(target_entity) | float(0) }}"
+      charging_power: >-
+        {% if charging_sign_value == 'negative' %}
+          {{ [0, raw_battery_power * -1] | max }}
+        {% else %}
+          {{ [0, raw_battery_power] | max }}
+        {% endif %}
+      energy: >-
+        {{ ((soc * (battery_capacity | float(25))) / 100) | round(2) }}
+      flow_text: >-
+        {% if charging_power > 0 %}
+          Laden
+        {% elif charging_sign_value == 'negative' and raw_battery_power > 0 %}
+          Entladen
+        {% elif charging_sign_value == 'positive' and raw_battery_power < 0 %}
+          Entladen
+        {% else %}
+          Stillstand
+        {% endif %}
 
-        desired_power_raw: >-
-          {% if charging_power > 0 %}
-            {{ charging_power + current_target - configured_reserve }}
-          {% else %}
-            0
-          {% endif %}
+      desired_power_raw: >-
+        {% if charging_power > 0 %}
+          {{ charging_power + current_target - configured_reserve }}
+        {% else %}
+          0
+        {% endif %}
 
-        desired_power: >-
-          {{ [desired_power_raw, configured_max] | min | max(0) | round(0) | int }}
+      desired_power: >-
+        {{ [desired_power_raw, configured_max] | min | max(0) | round(0) | int }}
 
-        target_difference: >-
-          {{ (desired_power - current_target) | abs }}
+      target_difference: >-
+        {{ (desired_power - current_target) | abs }}
 
-    - choose:
-        - conditions:
-            - condition: template
-              value_template: "{{ desired_power == 0 }}"
-            - condition: template
-              value_template: "{{ current_target > 0 }}"
-          sequence:
-            - action: button.press
-              target:
-                entity_id: !input miner_stop
+  - choose:
+      - conditions:
+          - condition: template
+            value_template: "{{ desired_power == 0 }}"
+          - condition: template
+            value_template: "{{ current_target > 0 }}"
+        sequence:
+          - action: button.press
+            target:
+              entity_id: !input miner_stop
 
-            - action: persistent_notification.create
-              data:
-                notification_id: !input notification_id
-                title: "Antminer – STOP"
-                message: >-
-                  **Miner gestoppt, weil die Batterie nicht lädt.**
+          - action: persistent_notification.create
+            data:
+              notification_id: !input notification_id
+              title: "Antminer – STOP"
+              message: >-
+                **Miner gestoppt, weil die Batterie nicht lädt.**
 
-                  Batterie: **{{ soc | round(1) }} %** · **{{ energy }} kWh**
+                Batterie: **{{ soc | round(1) }} %** · **{{ energy }} kWh**
 
-                  Batterieleistung: **{{ (raw_battery_power / 1000) | round(2) }} kW**
-                  · {{ flow_text }}
+                Batterieleistung: **{{ (raw_battery_power / 1000) | round(2) }} kW**
+                · {{ flow_text }}
 
-                  Ladeleistung: **{{ (charging_power / 1000) | round(2) }} kW**
+                Ladeleistung: **{{ (charging_power / 1000) | round(2) }} kW**
 
-        - conditions:
-            - condition: template
-              value_template: "{{ desired_power > 0 }}"
-            - condition: template
-              value_template: "{{ target_difference >= configured_min_change }}"
-          sequence:
-            - action: number.set_value
-              target:
-                entity_id: !input miner_power_target
-              data:
-                value: "{{ desired_power }}"
+      - conditions:
+          - condition: template
+            value_template: "{{ desired_power > 0 }}"
+          - condition: template
+            value_template: "{{ target_difference >= configured_min_change }}"
+        sequence:
+          - action: number.set_value
+            target:
+              entity_id: !input miner_power_target
+            data:
+              value: "{{ desired_power }}"
 
-            - action: button.press
-              target:
-                entity_id: !input miner_start
+          - action: button.press
+            target:
+              entity_id: !input miner_start
 
-            - condition: template
-              value_template: "{{ trigger.id != 'ha_start' }}"
+          - condition: template
+            value_template: "{{ trigger.id != 'ha_start' }}"
 
-            - action: persistent_notification.create
-              data:
-                notification_id: !input notification_id
-                title: "Antminer – Ladeleistungsregelung"
-                message: >-
-                  **Miner-Leistung auf {{ desired_power }} W gesetzt.**
+          - action: persistent_notification.create
+            data:
+              notification_id: !input notification_id
+              title: "Antminer – Ladeleistungsregelung"
+              message: >-
+                **Miner-Leistung auf {{ desired_power }} W gesetzt.**
 
-                  Batterie: **{{ soc | round(1) }} %** · **{{ energy }} kWh**
+                Batterie: **{{ soc | round(1) }} %** · **{{ energy }} kWh**
 
-                  Batterieleistung: **{{ (raw_battery_power / 1000) | round(2) }} kW**
-                  · {{ flow_text }}
+                Batterieleistung: **{{ (raw_battery_power / 1000) | round(2) }} kW**
+                · {{ flow_text }}
 
-                  Ladeleistung vor Anpassung:
-                  **{{ (charging_power / 1000) | round(2) }} kW**
+                Ladeleistung vor Anpassung:
+                **{{ (charging_power / 1000) | round(2) }} kW**
 
-                  Lade-Reserve: **{{ configured_reserve | round(0) }} W**
+                Lade-Reserve: **{{ configured_reserve | round(0) }} W**
 
 
-  mode: restart
+mode: restart
