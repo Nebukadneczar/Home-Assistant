@@ -2,7 +2,7 @@
 
 Sammlung von Home-Assistant-Blueprints und Automationen für Energie-, Batterie-, Solar- und Miner-Steuerung.
 
-## Antminer – Batterie-/Solarsteuerung 2832/1500/944 W
+## Antminer – Batterie-/Solarsteuerung
 
 **Version: v1.0.1**
 
