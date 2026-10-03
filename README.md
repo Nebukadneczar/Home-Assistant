@@ -4,10 +4,10 @@ Sammlung von Home-Assistant-Blueprints und Automationen für Energie-, Batterie-
 
 ## Antminer – Batterie-/Solarsteuerung nach Ladeleistung
 
-**Version: v1.1.2**
+**Version: v1.1.3**
 
 Blueprint:
-`blueprints/automation/antminer/antminer_batterie_solar.yaml`
+`blueprints/automation/antminer/antminer_batterie_ladeleistungssteuerung.yaml`
 
 Seit v1.1.0 ist die **tatsächliche Batterieladeleistung die primäre Regelgröße**. Der Miner wird dynamisch so geregelt, dass nach der Anpassung eine konfigurierbare Lade-Reserve in der Batterie verbleibt.
 
@@ -101,13 +101,13 @@ Bei diesem System gilt:
 
 **Import-URL:**
 
-https://raw.githubusercontent.com/Nebukadneczar/Home-Assistant/main/blueprints/automation/antminer/antminer_batterie_solar.yaml
+https://raw.githubusercontent.com/Nebukadneczar/Home-Assistant/main/blueprints/automation/antminer/antminer_batterie_ladeleistungssteuerung.yaml
 
 In Home Assistant:
 
 **Einstellungen → Automatisierungen & Szenen → Blueprints → Blueprint importieren**
 
-Die Blueprint-Version wurde von **v1.0.1 auf v1.1.1** umgestellt. Die frühere SOC-Kennlinie ist damit nicht mehr die aktive Leistungsregelung. In v1.1.1 wurde außerdem ein YAML-Importfehler in der Choose-Struktur korrigiert und die Einrückung von `default` präzisiert.
+Die Blueprint-Version wurde von **v1.0.1 auf v1.1.1** umgestellt. Die frühere SOC-Kennlinie ist damit nicht mehr die aktive Leistungsregelung. In v1.1.3 wurde die optionale `default`-Struktur entfernt und zusätzlich ein neuer Dateiname verwendet, damit der Blueprint-Import nicht mehr auf eine zwischengespeicherte alte YAML-Version zugreift.
 
 ## Repository-Struktur
 
