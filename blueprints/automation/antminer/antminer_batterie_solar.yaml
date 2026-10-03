@@ -1,24 +1,20 @@
-# Version: 1.0.1
+# Version: 1.1.0
 blueprint:
-  name: Antminer – Batterie-/Solarsteuerung 2832/1500/944 W
+  name: "Antminer – Batterie-/Solarsteuerung nach Ladeleistung"
   description: >
-    Wiederverwendbare Automation für einen Miner mit Batterie-SOC und
-    Batterieleistung. Der Nutzer wählt seine eigenen Entitäten für Batterie-SOC,
-    Batterie-Leistung, Miner-Leistungsziel sowie Start/Stop-Buttons aus.
+    Wiederverwendbare Automation für einen Miner, dessen Leistung dynamisch
+    anhand der tatsächlichen Batterieladeleistung geregelt wird.
 
-    Kennlinie:
-      >=60 % SOC → 2832 W
-      40 bis <60 % → 1500 W
-      25 bis <40 % → 944 W
-      24 bis <25 % → aktuellen Zustand beibehalten
+    Die Ladeleistung ist die primäre Regelgröße. Der Miner erhält nur so viel
+    Leistung, dass die Batterie nach der Anpassung mit einer konfigurierbaren
+    Reserve weiterlädt. Der aktuelle Miner-Leistungswert wird dabei in die
+    Berechnung einbezogen, damit die Regelung nicht zwischen zwei Zuständen
+    hin- und herschaltet.
 
-    Unter 24 % SOC wird die Batterieladeleistung als Solar-Override verwendet:
-      >4000 W Laden → 2832 W
-      >2500 W Laden → 1500 W
-      >1500 W Laden → 944 W
-      <=1500 W Laden → STOP
+    Ist die Batterie nicht am Laden, wird der Miner gestoppt.
 
-    Schaltschwellen müssen 5 Minuten stabil sein. Die Ladeleistung kann je nach
+    Die Batteriekapazität und der SOC werden weiterhin nur für die
+    Status-/Benachrichtigungsanzeige verwendet. Die Ladeleistung kann je nach
     System mit positivem oder negativem Vorzeichen übertragen werden.
   domain: automation
   author: Community Blueprint
@@ -26,7 +22,7 @@ blueprint:
   input:
     battery_soc:
       name: Batterie SOC
-      description: Sensor für den Batterie-Ladezustand in Prozent.
+      description: Sensor für den Batterie-Ladezustand in Prozent. Dient zur Anzeige.
       selector:
         entity:
           filter:
@@ -35,7 +31,7 @@ blueprint:
 
     battery_power:
       name: Batterie-Leistung
-      description: Sensor für die Batterie-Leistung in Watt.
+      description: Sensor für die aktuelle Batterieleistung in Watt.
       selector:
         entity:
           filter:
@@ -45,8 +41,8 @@ blueprint:
     charging_sign:
       name: Vorzeichen bei Batterieladung
       description: >
-        Wähle positiv, wenn z. B. +4000 W Laden bedeutet. Wähle negativ,
-        wenn z. B. -4000 W Laden bedeutet.
+        Wähle positiv, wenn z. B. +1860 W Laden bedeutet. Wähle negativ,
+        wenn z. B. -1860 W Laden bedeutet.
       default: positive
       selector:
         select:
@@ -81,6 +77,46 @@ blueprint:
             - domain: button
           multiple: false
 
+    max_miner_power:
+      name: Maximale Minerleistung
+      description: Absolute Obergrenze des Miners.
+      default: 2832
+      selector:
+        number:
+          min: 0
+          max: 15000
+          step: 1
+          unit_of_measurement: W
+          mode: box
+
+    charging_reserve:
+      name: Lade-Reserve
+      description: >
+        Leistung, die nach der Anpassung weiterhin als Batterieladeleistung
+        übrig bleiben soll.
+      default: 200
+      selector:
+        number:
+          min: 0
+          max: 2000
+          step: 10
+          unit_of_measurement: W
+          mode: box
+
+    minimum_change:
+      name: Mindeständerung
+      description: >
+        Kleine Leistungsänderungen unterhalb dieses Wertes werden ignoriert,
+        um unnötige Stellbefehle bei kleinen Schwankungen zu vermeiden.
+      default: 100
+      selector:
+        number:
+          min: 1
+          max: 1000
+          step: 1
+          unit_of_measurement: W
+          mode: box
+
     battery_capacity_kwh:
       name: Gesamte Batteriekapazität
       description: Wird für die kWh-Anzeige in den Benachrichtigungen verwendet.
@@ -93,131 +129,33 @@ blueprint:
           unit_of_measurement: kWh
           mode: box
 
+    evaluation_interval:
+      name: Prüfintervall
+      description: Zeit zwischen den Regelprüfungen.
+      default: "/5"
+      selector:
+        select:
+          options:
+            - label: "1 Minute"
+              value: "/1"
+            - label: "5 Minuten"
+              value: "/5"
+            - label: "10 Minuten"
+              value: "/10"
+            - label: "15 Minuten"
+              value: "/15"
+
     notification_id:
       name: Benachrichtigungs-ID
-      description: >
-        Eindeutige ID pro Miner, z. B. antminer36_batterie. So wird die
-        persistente Meldung aktualisiert statt vervielfacht.
-      default: antminer_batterie_status
+      description: Eindeutige ID pro Miner für die persistente Statusmeldung.
+      default: antminer_batterie_ladeleistung
       selector:
         text:
 
   triggers:
-    # SOC-Grenzen
-    - trigger: numeric_state
-      entity_id: !input battery_soc
-      above: 60
-      for: "00:05:00"
-      id: soc_above_60
-
-    - trigger: numeric_state
-      entity_id: !input battery_soc
-      below: 60
-      for: "00:05:00"
-      id: soc_below_60
-
-    - trigger: numeric_state
-      entity_id: !input battery_soc
-      above: 40
-      for: "00:05:00"
-      id: soc_above_40
-
-    - trigger: numeric_state
-      entity_id: !input battery_soc
-      below: 40
-      for: "00:05:00"
-      id: soc_below_40
-
-    - trigger: numeric_state
-      entity_id: !input battery_soc
-      above: 25
-      for: "00:05:00"
-      id: soc_above_25
-
-    - trigger: numeric_state
-      entity_id: !input battery_soc
-      below: 25
-      for: "00:05:00"
-      id: soc_below_25
-
-    - trigger: numeric_state
-      entity_id: !input battery_soc
-      below: 24
-      for: "00:05:00"
-      id: soc_below_24
-
-    # Ladeleistungs-Grenzen für positive und negative Vorzeichen.
-    - trigger: numeric_state
-      entity_id: !input battery_power
-      above: 1500
-      for: "00:05:00"
-      id: power_above_1500
-
-    - trigger: numeric_state
-      entity_id: !input battery_power
-      below: 1500
-      for: "00:05:00"
-      id: power_below_1500
-
-    - trigger: numeric_state
-      entity_id: !input battery_power
-      above: 2500
-      for: "00:05:00"
-      id: power_above_2500
-
-    - trigger: numeric_state
-      entity_id: !input battery_power
-      below: 2500
-      for: "00:05:00"
-      id: power_below_2500
-
-    - trigger: numeric_state
-      entity_id: !input battery_power
-      above: 4000
-      for: "00:05:00"
-      id: power_above_4000
-
-    - trigger: numeric_state
-      entity_id: !input battery_power
-      below: 4000
-      for: "00:05:00"
-      id: power_below_4000
-
-    - trigger: numeric_state
-      entity_id: !input battery_power
-      below: -1500
-      for: "00:05:00"
-      id: power_below_minus_1500
-
-    - trigger: numeric_state
-      entity_id: !input battery_power
-      above: -1500
-      for: "00:05:00"
-      id: power_above_minus_1500
-
-    - trigger: numeric_state
-      entity_id: !input battery_power
-      below: -2500
-      for: "00:05:00"
-      id: power_below_minus_2500
-
-    - trigger: numeric_state
-      entity_id: !input battery_power
-      above: -2500
-      for: "00:05:00"
-      id: power_above_minus_2500
-
-    - trigger: numeric_state
-      entity_id: !input battery_power
-      below: -4000
-      for: "00:05:00"
-      id: power_below_minus_4000
-
-    - trigger: numeric_state
-      entity_id: !input battery_power
-      above: -4000
-      for: "00:05:00"
-      id: power_above_minus_4000
+    - trigger: time_pattern
+      minutes: !input evaluation_interval
+      id: zyklus
 
     - trigger: homeassistant
       event: start
@@ -239,7 +177,10 @@ blueprint:
         start_entity: !input miner_start
         stop_entity: !input miner_stop
         charging_sign_value: !input charging_sign
-        battery_capacity_kwh: !input battery_capacity_kwh
+        configured_max: !input max_miner_power
+        configured_reserve: !input charging_reserve
+        configured_min_change: !input minimum_change
+        battery_capacity: !input battery_capacity_kwh
 
     - condition: template
       value_template: >-
@@ -250,65 +191,56 @@ blueprint:
     - variables:
         soc: "{{ states(soc_entity) | float(0) }}"
         raw_battery_power: "{{ states(power_entity) | float(0) }}"
-        current_target: "{{ states(target_entity) | float(-1) }}"
+        current_target: "{{ states(target_entity) | float(0) }}"
         charging_power: >-
           {% if charging_sign_value == 'negative' %}
             {{ [0, raw_battery_power * -1] | max }}
           {% else %}
             {{ [0, raw_battery_power] | max }}
           {% endif %}
-        energy: "{{ ((soc * (battery_capacity_kwh | float(25))) / 100) | round(2) }}"
+        energy: >-
+          {{ ((soc * (battery_capacity | float(25))) / 100) | round(2) }}
         flow_text: >-
           {% if charging_power > 0 %}
             Laden
-          {% elif raw_battery_power < 0 %}
+          {% elif charging_sign_value == 'negative' and raw_battery_power > 0 %}
+            Entladen
+          {% elif charging_sign_value == 'positive' and raw_battery_power < 0 %}
             Entladen
           {% else %}
             Stillstand
           {% endif %}
-        desired_power: >-
-          {% if soc >= 60 %}
-            2832
-          {% elif soc >= 40 %}
-            1500
-          {% elif soc >= 25 %}
-            944
-          {% elif soc < 24 %}
-            {% if charging_power > 4000 %}
-              2832
-            {% elif charging_power > 2500 %}
-              1500
-            {% elif charging_power > 1500 %}
-              944
-            {% else %}
-              0
-            {% endif %}
+
+        desired_power_raw: >-
+          {% if charging_power > 0 %}
+            {{ charging_power + current_target - configured_reserve }}
           {% else %}
-            -1
+            0
           {% endif %}
 
-    - choose:
-        # 24,0–24,9 %: Zustand unverändert lassen.
-        - conditions:
-            - condition: template
-              value_template: "{{ desired_power | int == -1 }}"
-          sequence:
-            - stop: "SOC zwischen 24 % und 25 % – bisherigen Miner-Zustand beibehalten."
+        desired_power: >-
+          {{ [desired_power_raw, configured_max] | min | max(0) | round(0) | int }}
 
-        # STOP
+        target_difference: >-
+          {{ (desired_power - current_target) | abs }}
+
+    - choose:
         - conditions:
             - condition: template
-              value_template: "{{ desired_power | int == 0 }}"
+              value_template: "{{ desired_power == 0 }}"
+            - condition: template
+              value_template: "{{ current_target > 0 }}"
           sequence:
             - action: button.press
               target:
                 entity_id: !input miner_stop
+
             - action: persistent_notification.create
               data:
                 notification_id: !input notification_id
                 title: "Antminer – STOP"
                 message: >-
-                  **Miner gestoppt.**
+                  **Miner gestoppt, weil die Batterie nicht lädt.**
 
                   Batterie: **{{ soc | round(1) }} %** · **{{ energy }} kWh**
 
@@ -317,19 +249,17 @@ blueprint:
 
                   Ladeleistung: **{{ (charging_power / 1000) | round(2) }} kW**
 
-        # AKTIVER BETRIEB – nur bei tatsächlicher Änderung oder nach HA-Start.
         - conditions:
             - condition: template
-              value_template: "{{ desired_power | int > 0 }}"
+              value_template: "{{ desired_power > 0 }}"
             - condition: template
-              value_template: >-
-                {{ trigger.id == 'ha_start' or current_target != (desired_power | float) }}
+              value_template: "{{ target_difference >= configured_min_change }}"
           sequence:
             - action: number.set_value
               target:
                 entity_id: !input miner_power_target
               data:
-                value: "{{ desired_power | int }}"
+                value: "{{ desired_power }}"
 
             - action: button.press
               target:
@@ -341,15 +271,20 @@ blueprint:
             - action: persistent_notification.create
               data:
                 notification_id: !input notification_id
-                title: "Antminer – Leistungsänderung"
+                title: "Antminer – Ladeleistungsregelung"
                 message: >-
-                  **Miner auf {{ desired_power | int }} W gesetzt.**
+                  **Miner-Leistung auf {{ desired_power }} W gesetzt.**
 
                   Batterie: **{{ soc | round(1) }} %** · **{{ energy }} kWh**
 
                   Batterieleistung: **{{ (raw_battery_power / 1000) | round(2) }} kW**
                   · {{ flow_text }}
 
-                  Ladeleistung: **{{ (charging_power / 1000) | round(2) }} kW**
+                  Ladeleistung vor Anpassung:
+                  **{{ (charging_power / 1000) | round(2) }} kW**
+
+                  Lade-Reserve: **{{ configured_reserve | round(0) }} W**
+
+    default: []
 
   mode: restart
