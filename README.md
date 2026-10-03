@@ -4,6 +4,8 @@ Sammlung von Home-Assistant-Blueprints und Automationen für Energie-, Batterie-
 
 ## Antminer – Batterie-/Solarsteuerung 2832/1500/944 W
 
+**Version: v1.0.1**
+
 Blueprint:
 `blueprints/automation/antminer/antminer_batterie_solar.yaml`
 
