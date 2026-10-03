@@ -11,6 +11,13 @@ Blueprint:
 
 Dieser Blueprint steuert einen Miner abhängig vom Ladezustand der Batterie (SOC) und – bei niedrigem SOC – zusätzlich abhängig von der aktuellen Batterieladeleistung.
 
+### Visualisierung
+
+Beispielansicht der Statusanzeige in Home Assistant:
+
+![Antminer Batterie-/Solarsteuerung – Beispielansicht](docs/images/antminer-batterie-solar-demo.svg)
+
+
 ### Funktionsübersicht
 
 Die normale SOC-Kennlinie lautet:
