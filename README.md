@@ -2,125 +2,102 @@
 
 Sammlung von Home-Assistant-Blueprints und Automationen für Energie-, Batterie-, Solar- und Miner-Steuerung.
 
-## Antminer – Batterie-/Solarsteuerung
+## Antminer – Batterie-/Solarsteuerung nach Ladeleistung
 
-**Version: v1.0.1**
+**Version: v1.1.0**
 
 Blueprint:
 `blueprints/automation/antminer/antminer_batterie_solar.yaml`
 
-Dieser Blueprint steuert einen Miner abhängig vom Ladezustand der Batterie (SOC) und – bei niedrigem SOC – zusätzlich abhängig von der aktuellen Batterieladeleistung.
+Seit v1.1.0 ist die **tatsächliche Batterieladeleistung die primäre Regelgröße**. Der Miner wird dynamisch so geregelt, dass nach der Anpassung eine konfigurierbare Lade-Reserve in der Batterie verbleibt.
 
-### Visualisierung
+### Neue Regelung
 
-Beispielansicht der Statusanzeige in Home Assistant:
+Die Berechnung verwendet den aktuellen Miner-Zielwert mit:
 
-![Antminer Batterie-/Solarsteuerung – Beispielansicht](docs/images/antminer-batterie-solar-demo.svg)
+```
+neues Miner-Ziel =
+    aktuelle Ladeleistung
+    + aktuelles Miner-Ziel
+    - Lade-Reserve
+```
 
+Das Ergebnis wird auf die konfigurierte maximale Minerleistung begrenzt.
 
-### Funktionsübersicht
+Damit wird der aktuelle Minerverbrauch bei der Berechnung berücksichtigt. Beispiel:
 
-Die normale SOC-Kennlinie lautet:
+```
+Batterie lädt:       1.860 W
+Miner aktuell:         944 W
+Reserve:               200 W
 
-| Batterie-SOC | Miner-Leistungsziel |
-|---:|---:|
-| **≥ 60 %** | **2832 W** |
-| **40 % bis < 60 %** | **1500 W** |
-| **25 % bis < 40 %** | **944 W** |
-| **24 % bis < 25 %** | **aktuellen Zustand beibehalten** |
+1.860 + 944 - 200 = 2.604 W
+→ Miner-Ziel: 2.604 W
+```
 
-Unter **24 % SOC** greift ein Solar-/Ladeleistungs-Override. Dabei wird die tatsächliche Batterieladeleistung ausgewertet:
+Nach der Erhöhung des Miners sinkt die Batterieladeleistung entsprechend. Bei der nächsten Regelprüfung wird erneut gerechnet. Dadurch kann sich die Steuerung auf einen stabilen Betriebspunkt einregeln, anstatt nur feste SOC-Stufen zu schalten.
 
-| Batterie-SOC | Batterieladeleistung | Miner |
-|---:|---:|---:|
-| **< 24 %** | **> 4000 W** | **2832 W** |
-| **< 24 %** | **> 2500 W bis 4000 W** | **1500 W** |
-| **< 24 %** | **> 1500 W bis 2500 W** | **944 W** |
-| **< 24 %** | **≤ 1500 W** | **STOP** |
+Bei einer Batterieladeleistung von **0 W oder weniger** wird der Miner gestoppt.
 
-Alle Schaltschwellen müssen **5 Minuten stabil** anliegen.
+### Beispiel mit deinem aktuellen System
 
-### Verhalten bei 24–25 %
+Bei einer Anzeige wie:
 
-Der Bereich **24,0 % bis unter 25 %** ist bewusst ohne Aktion. Der bisherige Miner-Zustand bleibt erhalten.
+- PV Power Gesamt: **2.793 W**
+- Batterieladeleistung: **1.860 W**
 
-Ab **25,0 %** wird wieder die normale SOC-Kennlinie angewendet und der Miner auf **944 W** gesetzt.
+ist nicht automatisch die gesamte PV-Leistung für den Miner verfügbar. Die Batterieladeleistung zeigt bereits, was nach den übrigen Verbrauchern aktuell noch in die Batterie geht.
 
-### Neustart von Home Assistant
+Bei **1.860 W Ladeleistung** und einem laufenden Miner mit **944 W** sowie **200 W Reserve** ergibt sich zunächst ein neues Ziel von **2.604 W**. Das liegt unter der maximalen Minerleistung von 2.832 W.
 
-Nach einem Neustart von Home Assistant wartet der Blueprint zunächst **30 Sekunden**, damit die gewählten Sensorwerte verfügbar sind.
+### Eigenschaften
 
-Anschließend wird der aktuelle Batterie- und Ladezustand ausgewertet und der Miner entsprechend gesetzt.
+- Ladeleistung statt SOC-Kennlinie als primäre Regelgröße
+- dynamische Leistungsberechnung
+- konfigurierbare Lade-Reserve
+- konfigurierbare maximale Minerleistung
+- konfigurierbare Mindeständerung
+- bei fehlender Ladeleistung: Miner STOP
+- SOC bleibt für Statusanzeige und Benachrichtigungen erhalten
+- 1/5/10/15-Minuten-Prüfintervall
+- 30-Sekunden-Wartezeit nach Home-Assistant-Start
+- unterstützt positive oder negative Vorzeichen der Batterieleistung
 
-Beispiel:
-
-`55 % SOC → 1500 W`
-
-### Eingaben des Blueprints
-
-Beim Erstellen einer Automation aus dem Blueprint werden die gerätespezifischen Entitäten ausgewählt:
+### Eingaben
 
 | Eingabe | Funktion |
 |---|---|
-| **Batterie SOC** | Sensor für den Batterie-Ladezustand in Prozent |
-| **Batterie-Leistung** | Sensor für die Batterieleistung in Watt |
-| **Vorzeichen bei Batterieladung** | Positiv oder negativ, je nach Systemdarstellung |
-| **Miner Leistungsziel** | Steuerbare `number.`-Entität des Miners |
-| **Miner Start** | `button.`-Entität zum Starten des Miners |
-| **Miner Stop** | `button.`-Entität zum Stoppen des Miners |
-| **Gesamte Batteriekapazität** | Kapazität in kWh für die Energieanzeige |
-| **Benachrichtigungs-ID** | Eindeutige ID für die persistente Statusmeldung |
+| **Batterie SOC** | Anzeige des Ladezustands |
+| **Batterie-Leistung** | Aktuelle Batterieleistung |
+| **Vorzeichen bei Batterieladung** | Positiv oder negativ |
+| **Miner Leistungsziel** | `number.`-Entität des Miners |
+| **Miner Start** | Start-Button |
+| **Miner Stop** | Stop-Button |
+| **Maximale Minerleistung** | Absolute Obergrenze |
+| **Lade-Reserve** | Gewünschte Rest-Ladeleistung der Batterie |
+| **Mindeständerung** | Verhindert kleine unnötige Stellbefehle |
+| **Batteriekapazität** | kWh-Anzeige |
+| **Prüfintervall** | Regelzyklus |
+| **Benachrichtigungs-ID** | Persistente Meldung |
 
-### Vorzeichen der Batterieleistung
+### Beispielkonfiguration für das getestete System
 
-Der Blueprint kann zwei Darstellungen verarbeiten:
+```
+sensor.growatt_battery_battery_soc
+sensor.growatt_battery_battery_power
+number.antminer36_power_target
+button.solargarten_antminer36_bosminer_start
+button.solargarten_antminer36_bosminer_stop
+```
 
-- **positiv = Laden**
-- **negativ = Laden**
+Gesamtkapazität: **25 kWh**
 
-Damit kann derselbe Blueprint mit unterschiedlichen Wechselrichter-/BMS-Integrationen verwendet werden.
+Bei diesem System gilt:
 
-### Benachrichtigungen
+- **positiver Wert der Batterieleistung = Laden**
+- **negativer Wert = Entladen**
 
-Bei einer tatsächlichen Änderung der Miner-Leistung erzeugt der Blueprint eine persistente Home-Assistant-Benachrichtigung.
-
-Die Meldung enthält unter anderem:
-
-- aktuellen Batterie-SOC
-- rechnerischen Energieinhalt in kWh
-- Batterieleistung
-- erkannte Lade-/Entladerichtung
-- aktuelle Ladeleistung
-- neue Miner-Leistung
-
-Für unterschiedliche Miner sollte eine eigene **Benachrichtigungs-ID** verwendet werden.
-
-### Beispielkonfiguration für das hier getestete System
-
-Beim getesteten System werden folgende Entitäten verwendet:
-
-`sensor.growatt_battery_battery_soc`
-
-`sensor.growatt_battery_battery_power`
-
-`number.antminer36_power_target`
-
-`button.solargarten_antminer36_bosminer_start`
-
-`button.solargarten_antminer36_bosminer_stop`
-
-Gesamtkapazität:
-
-`25 kWh`
-
-Bei diesem System gilt derzeit:
-
-- positiver Wert der Batterieleistung = Laden
-- negativer Wert = Entladen
-
-### Installation in Home Assistant
-
-Der Blueprint kann aus dem GitHub-Repository importiert werden.
+### Installation
 
 **Import-URL:**
 
@@ -128,24 +105,21 @@ https://raw.githubusercontent.com/Nebukadneczar/Home-Assistant/main/blueprints/a
 
 In Home Assistant:
 
-**Einstellungen → Automationen & Szenen → Blueprints → Blueprint importieren**
+**Einstellungen → Automatisierungen & Szenen → Blueprints → Blueprint importieren**
 
-Dort die Import-URL einfügen und anschließend die gewünschte Automation aus dem Blueprint erstellen.
-
-### Wichtiger Hinweis
-
-Der Blueprint arbeitet mit den tatsächlich ausgewählten Entitäten des jeweiligen Home-Assistant-Systems. Entitätsnamen, Leistungsgrenzen, SOC-Werte und Start-/Stop-Funktionen können sich je nach Miner, Wechselrichter, Batterie und Integration unterscheiden.
-
-Die **farbige Dashboard-Karte** ist nicht Bestandteil dieses Blueprints. Sie ist eine separate Home-Assistant-Dashboard-Konfiguration.
+Die Blueprint-Version wurde von **v1.0.1 auf v1.1.0** umgestellt. Die frühere SOC-Kennlinie ist damit nicht mehr die aktive Leistungsregelung.
 
 ## Repository-Struktur
 
-```text
+```
 Home-Assistant/
 ├── README.md
+├── LICENSE
+├── docs/
+│   └── images/
+│       └── antminer-batterie-solar-demo.svg
 └── blueprints/
     └── automation/
         └── antminer/
             └── antminer_batterie_solar.yaml
 ```
-
