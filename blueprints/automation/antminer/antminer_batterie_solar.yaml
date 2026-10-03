@@ -1,0 +1,354 @@
+blueprint:
+  name: Antminer – Batterie-/Solarsteuerung 2832/1500/944 W
+  description: >
+    Wiederverwendbare Automation für einen Miner mit Batterie-SOC und
+    Batterieleistung. Der Nutzer wählt seine eigenen Entitäten für Batterie-SOC,
+    Batterie-Leistung, Miner-Leistungsziel sowie Start/Stop-Buttons aus.
+
+    Kennlinie:
+      >=60 % SOC → 2832 W
+      40 bis <60 % → 1500 W
+      25 bis <40 % → 944 W
+      24 bis <25 % → aktuellen Zustand beibehalten
+
+    Unter 24 % SOC wird die Batterieladeleistung als Solar-Override verwendet:
+      >4000 W Laden → 2832 W
+      >2500 W Laden → 1500 W
+      >1500 W Laden → 944 W
+      <=1500 W Laden → STOP
+
+    Schaltschwellen müssen 5 Minuten stabil sein. Die Ladeleistung kann je nach
+    System mit positivem oder negativem Vorzeichen übertragen werden.
+  domain: automation
+  author: Community Blueprint
+
+  input:
+    battery_soc:
+      name: Batterie SOC
+      description: Sensor für den Batterie-Ladezustand in Prozent.
+      selector:
+        entity:
+          filter:
+            - domain: sensor
+          multiple: false
+
+    battery_power:
+      name: Batterie-Leistung
+      description: Sensor für die Batterie-Leistung in Watt.
+      selector:
+        entity:
+          filter:
+            - domain: sensor
+          multiple: false
+
+    charging_sign:
+      name: Vorzeichen bei Batterieladung
+      description: >
+        Wähle positiv, wenn z. B. +4000 W Laden bedeutet. Wähle negativ,
+        wenn z. B. -4000 W Laden bedeutet.
+      default: positive
+      selector:
+        select:
+          options:
+            - positive
+            - negative
+
+    miner_power_target:
+      name: Miner Leistungsziel
+      description: Steuerbare number-Entität für das Leistungsziel des Miners.
+      selector:
+        entity:
+          filter:
+            - domain: number
+          multiple: false
+
+    miner_start:
+      name: Miner Start
+      description: Button zum Starten des Miners.
+      selector:
+        entity:
+          filter:
+            - domain: button
+          multiple: false
+
+    miner_stop:
+      name: Miner Stop
+      description: Button zum Stoppen des Miners.
+      selector:
+        entity:
+          filter:
+            - domain: button
+          multiple: false
+
+    battery_capacity_kwh:
+      name: Gesamte Batteriekapazität
+      description: Wird für die kWh-Anzeige in den Benachrichtigungen verwendet.
+      default: 25
+      selector:
+        number:
+          min: 0.1
+          max: 1000
+          step: 0.1
+          unit_of_measurement: kWh
+          mode: box
+
+    notification_id:
+      name: Benachrichtigungs-ID
+      description: >
+        Eindeutige ID pro Miner, z. B. antminer36_batterie. So wird die
+        persistente Meldung aktualisiert statt vervielfacht.
+      default: antminer_batterie_status
+      selector:
+        text:
+
+  triggers:
+    # SOC-Grenzen
+    - trigger: numeric_state
+      entity_id: !input battery_soc
+      above: 60
+      for: "00:05:00"
+      id: soc_above_60
+
+    - trigger: numeric_state
+      entity_id: !input battery_soc
+      below: 60
+      for: "00:05:00"
+      id: soc_below_60
+
+    - trigger: numeric_state
+      entity_id: !input battery_soc
+      above: 40
+      for: "00:05:00"
+      id: soc_above_40
+
+    - trigger: numeric_state
+      entity_id: !input battery_soc
+      below: 40
+      for: "00:05:00"
+      id: soc_below_40
+
+    - trigger: numeric_state
+      entity_id: !input battery_soc
+      above: 25
+      for: "00:05:00"
+      id: soc_above_25
+
+    - trigger: numeric_state
+      entity_id: !input battery_soc
+      below: 25
+      for: "00:05:00"
+      id: soc_below_25
+
+    - trigger: numeric_state
+      entity_id: !input battery_soc
+      below: 24
+      for: "00:05:00"
+      id: soc_below_24
+
+    # Ladeleistungs-Grenzen für positive und negative Vorzeichen.
+    - trigger: numeric_state
+      entity_id: !input battery_power
+      above: 1500
+      for: "00:05:00"
+      id: power_above_1500
+
+    - trigger: numeric_state
+      entity_id: !input battery_power
+      below: 1500
+      for: "00:05:00"
+      id: power_below_1500
+
+    - trigger: numeric_state
+      entity_id: !input battery_power
+      above: 2500
+      for: "00:05:00"
+      id: power_above_2500
+
+    - trigger: numeric_state
+      entity_id: !input battery_power
+      below: 2500
+      for: "00:05:00"
+      id: power_below_2500
+
+    - trigger: numeric_state
+      entity_id: !input battery_power
+      above: 4000
+      for: "00:05:00"
+      id: power_above_4000
+
+    - trigger: numeric_state
+      entity_id: !input battery_power
+      below: 4000
+      for: "00:05:00"
+      id: power_below_4000
+
+    - trigger: numeric_state
+      entity_id: !input battery_power
+      below: -1500
+      for: "00:05:00"
+      id: power_below_minus_1500
+
+    - trigger: numeric_state
+      entity_id: !input battery_power
+      above: -1500
+      for: "00:05:00"
+      id: power_above_minus_1500
+
+    - trigger: numeric_state
+      entity_id: !input battery_power
+      below: -2500
+      for: "00:05:00"
+      id: power_below_minus_2500
+
+    - trigger: numeric_state
+      entity_id: !input battery_power
+      above: -2500
+      for: "00:05:00"
+      id: power_above_minus_2500
+
+    - trigger: numeric_state
+      entity_id: !input battery_power
+      below: -4000
+      for: "00:05:00"
+      id: power_below_minus_4000
+
+    - trigger: numeric_state
+      entity_id: !input battery_power
+      above: -4000
+      for: "00:05:00"
+      id: power_above_minus_4000
+
+    - trigger: homeassistant
+      event: start
+      id: ha_start
+
+  conditions: []
+
+  actions:
+    - if:
+        - condition: trigger
+          id: ha_start
+      then:
+        - delay: "00:00:30"
+
+    - variables:
+        soc_entity: !input battery_soc
+        power_entity: !input battery_power
+        target_entity: !input miner_power_target
+        start_entity: !input miner_start
+        stop_entity: !input miner_stop
+        charging_sign_value: !input charging_sign
+        battery_capacity_kwh: !input battery_capacity_kwh
+
+    - condition: template
+      value_template: >-
+        {{ states(soc_entity) not in ['unknown', 'unavailable', 'none', '']
+           and states(power_entity) not in ['unknown', 'unavailable', 'none', '']
+           and states(target_entity) not in ['unknown', 'unavailable', 'none', ''] }}
+
+    - variables:
+        soc: "{{ states(soc_entity) | float(0) }}"
+        raw_battery_power: "{{ states(power_entity) | float(0) }}"
+        current_target: "{{ states(target_entity) | float(-1) }}"
+        charging_power: >-
+          {% if charging_sign_value == 'negative' %}
+            {{ [0, raw_battery_power * -1] | max }}
+          {% else %}
+            {{ [0, raw_battery_power] | max }}
+          {% endif %}
+        energy: "{{ ((soc * (battery_capacity_kwh | float(25))) / 100) | round(2) }}"
+        flow_text: >-
+          {% if charging_power > 0 %}
+            Laden
+          {% elif raw_battery_power < 0 %}
+            Entladen
+          {% else %}
+            Stillstand
+          {% endif %}
+        desired_power: >-
+          {% if soc >= 60 %}
+            2832
+          {% elif soc >= 40 %}
+            1500
+          {% elif soc >= 25 %}
+            944
+          {% elif soc < 24 %}
+            {% if charging_power > 4000 %}
+              2832
+            {% elif charging_power > 2500 %}
+              1500
+            {% elif charging_power > 1500 %}
+              944
+            {% else %}
+              0
+            {% endif %}
+          {% else %}
+            -1
+          {% endif %}
+
+    - choose:
+        # 24,0–24,9 %: Zustand unverändert lassen.
+        - conditions:
+            - condition: template
+              value_template: "{{ desired_power | int == -1 }}"
+          sequence:
+            - stop: "SOC zwischen 24 % und 25 % – bisherigen Miner-Zustand beibehalten."
+
+        # STOP
+        - conditions:
+            - condition: template
+              value_template: "{{ desired_power | int == 0 }}"
+          sequence:
+            - action: button.press
+              target:
+                entity_id: !input miner_stop
+            - action: persistent_notification.create
+              data:
+                notification_id: !input notification_id
+                title: "Antminer – STOP"
+                message: >-
+                  **Miner gestoppt.**
+
+                  Batterie: **{{ soc | round(1) }} %** · **{{ energy }} kWh**
+
+                  Batterieleistung: **{{ (raw_battery_power / 1000) | round(2) }} kW**
+                  · {{ flow_text }}
+
+                  Ladeleistung: **{{ (charging_power / 1000) | round(2) }} kW**
+
+        # AKTIVER BETRIEB – nur bei tatsächlicher Änderung oder nach HA-Start.
+        - conditions:
+            - condition: template
+              value_template: "{{ desired_power | int > 0 }}"
+            - condition: template
+              value_template: >-
+                {{ trigger.id == 'ha_start' or current_target != (desired_power | float) }}
+          sequence:
+            - action: number.set_value
+              target:
+                entity_id: !input miner_power_target
+              data:
+                value: "{{ desired_power | int }}"
+
+            - action: button.press
+              target:
+                entity_id: !input miner_start
+
+            - condition: template
+              value_template: "{{ trigger.id != 'ha_start' }}"
+
+            - action: persistent_notification.create
+              data:
+                notification_id: !input notification_id
+                title: "Antminer – Leistungsänderung"
+                message: >-
+                  **Miner auf {{ desired_power | int }} W gesetzt.**
+
+                  Batterie: **{{ soc | round(1) }} %** · **{{ energy }} kWh**
+
+                  Batterieleistung: **{{ (raw_battery_power / 1000) | round(2) }} kW**
+                  · {{ flow_text }}
+
+                  Ladeleistung: **{{ (charging_power / 1000) | round(2) }} kW**
+
+  mode: restart
